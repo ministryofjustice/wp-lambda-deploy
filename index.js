@@ -3,7 +3,6 @@ var unzip = require('unzip');
 var stream = require('stream');
 
 exports.handler = function(event, context) {
-    
     var codepipeline = new AWS.CodePipeline({apiVersion: '2015-07-09'});
     var s3 = new AWS.S3({apiVersion: '2006-03-01'});
     var cloudformation = new AWS.CloudFormation({apiVersion: '2010-05-15'});
@@ -11,9 +10,40 @@ exports.handler = function(event, context) {
     // Retrieve the Job ID from the Lambda action
     var jobId = event["CodePipeline.job"].id;
 
-    console.log(event["CodePipeline.job"]);
+    console.log('event["CodePipeline.job"]', event["CodePipeline.job"]);
+
+    // Notify CodePipline of successful job, and exit with success
+    var exitSuccess = function(message) {
+        var params = { jobId: jobId }
+        codepipeline.putJobSuccessResult(params, function(err, data) {
+            if (err) {
+                context.fail(err);
+            } else {
+                context.succeed(message);
+            }
+        });
+    };
+
+    // Notify CodePipeline of failed job, and exit with failure
+    var exitFailure = function(message) {
+        var params = {
+            jobId: jobId,
+            failureDetails: {
+                message: message
+            }
+        }
+        codepipeline.putJobFailureResult(params, function(err, data) {
+            if (err) {
+                context.fail(err);
+            } else {
+                context.fail(message);
+            }
+        });
+    };
 
     var artifacts = event["CodePipeline.job"].data.inputArtifacts;
+
+    var promises = [];
 
     artifacts.forEach(function(artifact) {
         console.log(artifact);
@@ -23,13 +53,8 @@ exports.handler = function(event, context) {
         console.log(artifact.location.s3Location.bucketName);
         console.log('ABOUT TO LIST');
 
-        s3.listObjects({Bucket: artifact.location.s3Location.bucketName}).promise().then(function(data) {
-            console.log('It worked');
-            console.log(data);
-        }).catch(function(err) {
-            console.log('It didnt work');
-            console.log(err);
-        });
+        var list = s3.listObjects({Bucket: artifact.location.s3Location.bucketName});
+        promises.push(list.promise());
 
         console.log('DONE LIST');
 
@@ -60,20 +85,13 @@ exports.handler = function(event, context) {
         // });
     });
 
-    
-    // Notify AWS CodePipeline of a successful job
-    var putJobSuccess = function(message) {
-        var params = {
-            jobId: jobId
-        };
-        codepipeline.putJobSuccessResult(params, function(err, data) {
-            if(err) {
-                context.fail(err);
-            } else {
-                context.succeed(message);
-            }
-        });
-    };
-    
-    putJobSuccess("New version deployed.");
+    Promise.all(promises).then(function(values) {
+        console.log('All promises returned');
+        console.log(values);
+        exitSuccess('All promises returned');
+    }).catch(function(err) {
+        console.log('Something went wrong with the promises');
+        console.log(err);
+        exitFailure('Something went wrong');
+    });
 };
