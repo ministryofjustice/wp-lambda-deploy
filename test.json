@@ -6,7 +6,7 @@
             "actionConfiguration": {
                 "configuration": {
                     "FunctionName": "deployWpWeekly",
-                    "UserParameters": "some-input-such-as-a-URL"
+                    "UserParameters": "dev"
                 }
             },
             "inputArtifacts": [

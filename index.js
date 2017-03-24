@@ -10,7 +10,13 @@ exports.handler = function(event, context) {
     // Retrieve the Job ID from the Lambda action
     var jobId = event["CodePipeline.job"].id;
 
+    var stage = event["CodePipeline.job"].data.actionConfiguration.configuration.UserParameters;
+
+    var paramsFilename = 'knowthething/' + stage + '.json'
+
     console.log('event["CodePipeline.job"]', event["CodePipeline.job"]);
+    console.log('stage', stage);
+    console.log('paramsFilename', paramsFilename);
 
     // Notify CodePipline of successful job, and exit with success
     var exitSuccess = function(message) {
@@ -77,7 +83,7 @@ exports.handler = function(event, context) {
 
                 if (artifactName == 'CfTemplate' && fileName == "wp-stack.yaml") {
                     returnFile();
-                } else if (artifactName == 'CfParams' && fileName == "knowthething/dev.json") {
+                } else if (artifactName == 'CfParams' && fileName == paramsFilename) {
                     returnFile();
                 } else if (artifactName == 'DeployTag' && fileName == "BUILD_TAG.txt") {
                     returnFile();
@@ -91,7 +97,7 @@ exports.handler = function(event, context) {
     });
 
     Promise.all(promises).then(function(values) {
-        var stackParams = values.find((f) => { return f.name === 'knowthething/dev.json'; }).contents;
+        var stackParams = values.find((f) => { return f.name === paramsFilename; }).contents;
         var cloudTemplate = values.find((f) => { return f.name === 'wp-stack.yaml'; }).contents;
         var buildTag = values.find((f) => { return f.name === 'BUILD_TAG.txt'; }).contents;
 
@@ -100,12 +106,12 @@ exports.handler = function(event, context) {
         stackParams.forEach((value, index) => {
             if (value.ParameterKey == 'DockerImage') {
                 stackParams[index].ParameterValue =
-                  stackParams[index].ParameterValue.replace('branch-develop', buildTag);
+                  stackParams[index].ParameterValue.replace('<DEPLOY_TAG>', buildTag);
             }
         });
 
         var cloudFormationParams = {
-            StackName: 'knowthething-dev',
+            StackName: 'knowthething-' + stage,
             TemplateBody: cloudTemplate,
             UsePreviousTemplate: false,
             Parameters: stackParams,
