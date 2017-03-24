@@ -5,7 +5,7 @@ var stream = require('stream');
 exports.handler = function(event, context) {
     var codepipeline = new AWS.CodePipeline({apiVersion: '2015-07-09'});
     var s3 = new AWS.S3({apiVersion: '2006-03-01', signatureVersion: 'v4'});
-    var cloudformation = new AWS.CloudFormation({apiVersion: '2010-05-15'});
+    var cloudformation = new AWS.CloudFormation({apiVersion: '2010-05-15', region: 'eu-west-2'});
 
     // Retrieve the Job ID from the Lambda action
     var jobId = event["CodePipeline.job"].id;
@@ -53,16 +53,10 @@ exports.handler = function(event, context) {
     };
 
     var artifacts = event["CodePipeline.job"].data.inputArtifacts;
-
     var promises = [];
 
     artifacts.forEach(function(artifact) {
-        // console.log(artifact);
-
         var artifactName = artifact.name
-
-        // console.log(artifact.location.s3Location.bucketName);
-        console.log('ABOUT TO LIST');
 
         var s3Params = {
             Bucket: artifact.location.s3Location.bucketName,
@@ -74,13 +68,6 @@ exports.handler = function(event, context) {
             .pipe(unzip.Parse())
             .on('entry', function (entry) {
                 var fileName = entry.path;
-                var type = entry.type; // 'Directory' or 'File'
-                var size = entry.size;
-
-                console.log({
-                    artifactName: artifactName,
-                    fileName: fileName
-                });
 
                 var returnFile = function() {
                     readFile(entry, function(fileContents) {
@@ -101,26 +88,54 @@ exports.handler = function(event, context) {
         });
 
         promises.push(mypromise);
-
-        console.log('DONE LIST');
-
     });
 
     Promise.all(promises).then(function(values) {
         var stackParams = values.find((f) => { return f.name === 'knowthething/dev.json'; }).contents;
-        stackParams = JSON.parse(stackParams);
+        var cloudTemplate = values.find((f) => { return f.name === 'wp-stack.yaml'; }).contents;
         var buildTag = values.find((f) => { return f.name === 'BUILD_TAG.txt'; }).contents;
+
+        stackParams = JSON.parse(stackParams);
 
         stackParams.forEach((value, index) => {
             if (value.ParameterKey == 'DockerImage') {
-                stackParams[index].ParameterValue = 'I changed it!';
+                stackParams[index].ParameterValue =
+                  stackParams[index].ParameterValue.replace('branch-develop', buildTag);
             }
         });
 
+        var cloudFormationParams = {
+            StackName: 'knowthething-dev',
+            TemplateBody: cloudTemplate,
+            UsePreviousTemplate: false,
+            Parameters: stackParams,
+            Capabilities: [ 'CAPABILITY_IAM' ]
+        };
+
         console.log('buildTag', buildTag);
         console.log('stackParams', stackParams);
+        console.log('cloudTemplate', cloudTemplate);
 
-        exitSuccess('All promises returned');
+        var cloudFormationPromise = new Promise(function(fulfill, reject) {
+            cloudformation.updateStack(cloudFormationParams, function(err, data) {
+                if (err) {
+                    console.log(err, err.stack);
+                    reject(err);
+                } else {
+                    console.log(data);
+                    fulfill(data);
+                }
+            });
+        });
+
+        cloudFormationPromise.then(function(result) {
+            exitSuccess('Stack Updated');
+        }, function(err) {
+            console.log('Failed to update stack');
+            console.log(err);
+            exitFailure('Something went wrong');
+        });
+
     }).catch(function(err) {
         console.log('Something went wrong with the promises');
         console.log(err);
