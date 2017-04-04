@@ -1,5 +1,5 @@
 var AWS = require('aws-sdk');
-var unzip = require('unzip');
+var unzip = require('unzip2');
 var stream = require('stream');
 
 exports.handler = function(event, context) {
@@ -10,13 +10,15 @@ exports.handler = function(event, context) {
     // Retrieve the Job ID from the Lambda action
     var jobId = event["CodePipeline.job"].id;
 
-    var stage = event["CodePipeline.job"].data.actionConfiguration.configuration.UserParameters;
+    var userParams = JSON.parse(event["CodePipeline.job"].data.actionConfiguration.configuration.UserParameters);
 
-    var paramsFilename = 'knowthething/' + stage + '.json'
+    var cfParamsFilename = userParams.AppName + '/' + userParams.Env + '.json'
+    var cfTemplatesFilename = 'hosting/stack-template.yaml'
+    var buildTagFilename = 'BUILD_TAG.txt'
 
-    console.log('event["CodePipeline.job"]', event["CodePipeline.job"]);
-    console.log('stage', stage);
-    console.log('paramsFilename', paramsFilename);
+    console.log('CodePipeline Job ID:', jobId);
+    console.log('Going to deploy:', userParams);
+    console.log('Expecting to find params file at:', cfParamsFilename);
 
     // Notify CodePipline of successful job, and exit with success
     var exitSuccess = function(message) {
@@ -81,11 +83,11 @@ exports.handler = function(event, context) {
                     });
                 };
 
-                if (artifactName == 'CfTemplate' && fileName == "wp-stack.yaml") {
+                if (artifactName == 'CfTemplates' && fileName == cfTemplatesFilename) {
                     returnFile();
-                } else if (artifactName == 'CfParams' && fileName == paramsFilename) {
+                } else if (artifactName == 'CfParams' && fileName == cfParamsFilename) {
                     returnFile();
-                } else if (artifactName == 'DeployTag' && fileName == "BUILD_TAG.txt") {
+                } else if (artifactName == 'DeployTag' && fileName == buildTagFilename) {
                     returnFile();
                 } else {
                     entry.autodrain();
@@ -97,30 +99,31 @@ exports.handler = function(event, context) {
     });
 
     Promise.all(promises).then(function(values) {
-        var stackParams = values.find((f) => { return f.name === paramsFilename; }).contents;
-        var cloudTemplate = values.find((f) => { return f.name === 'wp-stack.yaml'; }).contents;
-        var buildTag = values.find((f) => { return f.name === 'BUILD_TAG.txt'; }).contents;
+        var stackParams = values.find((f) => { return f.name === cfParamsFilename; }).contents;
+        var cloudTemplate = values.find((f) => { return f.name === cfTemplatesFilename; }).contents;
+        var buildTag = values.find((f) => { return f.name === buildTagFilename; }).contents;
 
         stackParams = JSON.parse(stackParams);
 
+        var dockerImage;
         stackParams.forEach((value, index) => {
             if (value.ParameterKey == 'DockerImage') {
                 stackParams[index].ParameterValue =
                   stackParams[index].ParameterValue.replace('<DEPLOY_TAG>', buildTag);
+                  dockerImage = stackParams[index].ParameterValue;
             }
         });
 
         var cloudFormationParams = {
-            StackName: 'knowthething-' + stage,
+            StackName: userParams.AppName + '-' + userParams.Env,
             TemplateBody: cloudTemplate,
             UsePreviousTemplate: false,
             Parameters: stackParams,
             Capabilities: [ 'CAPABILITY_IAM' ]
         };
 
-        console.log('buildTag', buildTag);
-        console.log('stackParams', stackParams);
-        console.log('cloudTemplate', cloudTemplate);
+        console.log('Using build tag:', buildTag);
+        console.log('Docker image:', dockerImage);
 
         var cloudFormationPromise = new Promise(function(fulfill, reject) {
             cloudformation.updateStack(cloudFormationParams, function(err, data) {
@@ -137,14 +140,14 @@ exports.handler = function(event, context) {
         cloudFormationPromise.then(function(result) {
             exitSuccess('Stack Updated');
         }, function(err) {
-            console.log('Failed to update stack');
+            console.log('Failed to update CloudFormation stack');
             console.log(err);
-            exitFailure('Something went wrong');
+            exitFailure('Failed to update CloudFormation stack');
         });
 
     }).catch(function(err) {
-        console.log('Something went wrong with the promises');
-        console.log(err);
-        exitFailure('Something went wrong');
+        console.error('Unable to extract files from zipped input artifacts!');
+        console.error(err);
+        exitFailure('Unable to extract files from zipped input artifacts!');
     });
 };
