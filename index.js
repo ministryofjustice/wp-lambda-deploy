@@ -60,6 +60,12 @@ exports.handler = function(event, context) {
         });
     };
 
+    var handlePromiseError = function(error, userMessage) {
+        console.error(userMessage);
+        console.error(error);
+        exitFailure(userMessage);
+    }
+
     var artifacts = event["CodePipeline.job"].data.inputArtifacts;
     var promises = [];
 
@@ -117,7 +123,6 @@ exports.handler = function(event, context) {
         var cloudFormationParams = {
             StackName: userParams.AppName + '-' + userParams.Env,
             TemplateBody: cloudTemplate,
-            UsePreviousTemplate: false,
             Parameters: stackParams,
             Capabilities: [ 'CAPABILITY_IAM' ]
         };
@@ -125,29 +130,46 @@ exports.handler = function(event, context) {
         console.log('Using build tag:', buildTag);
         console.log('Docker image:', dockerImage);
 
-        var cloudFormationPromise = new Promise(function(fulfill, reject) {
-            cloudformation.updateStack(cloudFormationParams, function(err, data) {
+        var cloudCheckPromise = new Promise(function(fulfill, reject){
+            var params = { StackName: cloudFormationParams.StackName };
+            cloudformation.describeStacks(params, function(err, data){
                 if (err) {
-                    console.log(err, err.stack);
-                    reject(err);
+                    if (err.code == 'ValidationError'){
+                        fulfill('createStack');
+                    } else {
+                        reject(err);
+                    }
                 } else {
-                    console.log(data);
-                    fulfill(data);
+                    fulfill('updateStack');
                 }
             });
         });
 
-        cloudFormationPromise.then(function(result) {
-            exitSuccess('Stack Updated');
+        cloudCheckPromise.then(function(deployMethod) {
+            var cloudFormationPromise = new Promise(function(fulfill, reject) {
+                console.log('About to call ' + deployMethod + ' on CloudFormation stack');
+                cloudformation[deployMethod](cloudFormationParams, function(err, data) {
+                    if (err) {
+                        console.log(err, err.stack);
+                        reject(err);
+                    } else {
+                        console.log(data);
+                        fulfill(data);
+                    }
+                });
+            });
+
+            cloudFormationPromise.then(function(result) {
+                exitSuccess('Stack Updated');
+            }, function(err) {
+                handlePromiseError(err, 'Failed to update CloudFormation stack');
+            });
+
         }, function(err) {
-            console.log('Failed to update CloudFormation stack');
-            console.log(err);
-            exitFailure('Failed to update CloudFormation stack');
+            handlePromiseError(err, 'Failed to determine if stack exists.');
         });
 
     }).catch(function(err) {
-        console.error('Unable to extract files from zipped input artifacts!');
-        console.error(err);
-        exitFailure('Unable to extract files from zipped input artifacts!');
+        handlePromiseError(err, 'Unable to extract files from zipped input artifacts!');
     });
 };
