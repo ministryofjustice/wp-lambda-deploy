@@ -12,7 +12,7 @@ exports.handler = function(event, context) {
 
     var userParams = JSON.parse(event["CodePipeline.job"].data.actionConfiguration.configuration.UserParameters);
 
-    var cfParamsFilename = userParams.AppName + '/' + userParams.Env + '.json'
+    var cfParamsFilename = userParams.Env + '.json'
     var cfTemplatesFilename = 'hosting/stack-template.yaml'
     var buildTagFilename = 'BUILD_TAG.txt'
 
