@@ -77,7 +77,7 @@ exports.handler = function(event, context) {
         }, function(err, data){
             if (err) {
                 console.log(err, err.stack);
-                reject(err);
+                exitFailure(`Failed to check status of stack: ${err.message}`);
             } else {
                 console.log(data)
                 let stackStatus = data.Stacks[0].StackStatus;
