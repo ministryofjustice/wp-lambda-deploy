@@ -9,6 +9,7 @@ exports.handler = function(event, context) {
 
     // Retrieve the Job ID from the Lambda action
     var jobId = event["CodePipeline.job"].id;
+    var jobData = event["CodePipeline.job"].data;
 
     var userParams = JSON.parse(event["CodePipeline.job"].data.actionConfiguration.configuration.UserParameters);
 
@@ -16,13 +17,19 @@ exports.handler = function(event, context) {
     var cfTemplatesFilename = 'hosting/stack-template.yaml'
     var buildTagFilename = 'BUILD_TAG.txt'
 
+    // Allways dump event, is very usefull to debug
+    console.log(event);
+
     console.log('CodePipeline Job ID:', jobId);
     console.log('Going to deploy:', userParams);
     console.log('Expecting to find params file at:', cfParamsFilename);
 
     // Notify CodePipline of successful job, and exit with success
-    var exitSuccess = function(message) {
-        var params = { jobId: jobId }
+    var exitSuccess = function(message, wait=false) {
+        var params = {
+            jobId: jobId,
+            continuationToken: wait ? jobId : undefined, // we just need a string to validate
+        };
         codepipeline.putJobSuccessResult(params, function(err, data) {
             if (err) {
                 context.fail(err);
@@ -59,6 +66,50 @@ exports.handler = function(event, context) {
             cb(chunks.join(''));
         });
     };
+
+    // If we have a continuationToken that means that we are in the middle of one update.
+    // Lets check the CF Stack status and depending on that continue waiting, success or fail this job
+    if (jobData.continuationToken) {
+        console.log("continuation....");
+        let stackName = userParams.AppName + '-' + userParams.Env;
+        cloudformation.describeStacks({
+            StackName: stackName,
+        }, function(err, data){
+            if (err) {
+                console.log(err, err.stack);
+                reject(err);
+            } else {
+                console.log(data)
+                let stackStatus = data.Stacks[0].StackStatus;
+                switch(stackStatus) {
+                    case "CREATE_COMPLETE":
+                    case "UPDATE_COMPLETE":
+                    // case "DELETE_COMPLETE": // not used right now, fall into default / fail
+                        exitSuccess("Stack Updated");
+                        break;
+                    case "CREATE_IN_PROGRESS":
+                    case "DELETE_IN_PROGRESS": // ?
+                    case "REVIEW_IN_PROGRESS": // ?
+                    case "ROLLBACK_IN_PROGRESS":
+                    case "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS":
+                    case "UPDATE_IN_PROGRESS":
+                    case "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS":
+                    case "UPDATE_ROLLBACK_IN_PROGRESS":
+                        exitSuccess('Updating Stack, waiting...', true);
+                        break;
+                    case "ROLLBACK_COMPLETE":
+                    case "CREATE_FAILED":
+                    case "DELETE_FAILED":
+                    case "ROLLBACK_FAILED":
+                    case "UPDATE_ROLLBACK_COMPLETE":
+                    case "UPDATE_ROLLBACK_FAILED":
+                    default:
+                        exitFailure(`Stack "${stackName}" failed to update, check CF stack to get more info. Status: ${stackStatus}`)
+                }
+            }
+        });
+        return;
+    }
 
     var handlePromiseError = function(error, userMessage) {
         console.error(userMessage);
@@ -160,7 +211,7 @@ exports.handler = function(event, context) {
             });
 
             cloudFormationPromise.then(function(result) {
-                exitSuccess('Stack Updated');
+                exitSuccess('Updating Stack....', true);
             }, function(err) {
                 handlePromiseError(err, 'Failed to update CloudFormation stack');
             });
