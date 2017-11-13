@@ -11,13 +11,13 @@ exports.handler = function(event, context) {
     var jobId = event["CodePipeline.job"].id;
     var jobData = event["CodePipeline.job"].data;
 
-    var userParams = JSON.parse(event["CodePipeline.job"].data.actionConfiguration.configuration.UserParameters);
+    var userParams = JSON.parse(jobData.actionConfiguration.configuration.UserParameters);
 
     var cfParamsFilename = userParams.Env + '.json'
     var cfTemplatesFilename = 'hosting/stack-template.yaml'
     var buildTagFilename = 'BUILD_TAG.txt'
 
-    // Allways dump event, is very usefull to debug
+    // Always dump event, is very useful to debug
     console.log(event);
 
     console.log('CodePipeline Job ID:', jobId);
@@ -25,7 +25,7 @@ exports.handler = function(event, context) {
     console.log('Expecting to find params file at:', cfParamsFilename);
 
     // Notify CodePipline of successful job, and exit with success
-    var exitSuccess = function(message, wait=false) {
+    var exitSuccess = function(message, wait = false) {
         var params = {
             jobId: jobId,
             continuationToken: wait ? jobId : undefined, // we just need a string to validate
@@ -68,18 +68,18 @@ exports.handler = function(event, context) {
     };
 
     // If we have a continuationToken that means that we are in the middle of one update.
-    // Lets check the CF Stack status and depending on that continue waiting, success or fail this job
+    // Let's check the CF Stack status and depending on that continue waiting, success or fail this job
     if (jobData.continuationToken) {
         console.log("continuation....");
         let stackName = userParams.AppName + '-' + userParams.Env;
         cloudformation.describeStacks({
-            StackName: stackName,
-        }, function(err, data){
+            StackName: stackName
+        }, function(err, data) {
             if (err) {
                 console.log(err, err.stack);
                 exitFailure(`Failed to check status of stack: ${err.message}`);
             } else {
-                console.log(data)
+                console.log(data);
                 let stackStatus = data.Stacks[0].StackStatus;
                 switch(stackStatus) {
                     case "CREATE_COMPLETE":
@@ -104,7 +104,7 @@ exports.handler = function(event, context) {
                     case "UPDATE_ROLLBACK_COMPLETE":
                     case "UPDATE_ROLLBACK_FAILED":
                     default:
-                        exitFailure(`Stack "${stackName}" failed to update, check CF stack to get more info. Status: ${stackStatus}`)
+                        exitFailure(`Stack "${stackName}" failed to update. Check the CloudFormation stack to get more info. Status: ${stackStatus}`);
                 }
             }
         });
@@ -117,10 +117,9 @@ exports.handler = function(event, context) {
         exitFailure(userMessage);
     }
 
-    var artifacts = event["CodePipeline.job"].data.inputArtifacts;
     var promises = [];
 
-    artifacts.forEach(function(artifact) {
+    jobData.inputArtifacts.forEach(function(artifact) {
         var artifactName = artifact.name
 
         var s3Params = {
