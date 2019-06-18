@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
-    "aws-sdk": "^2.31.0",
+    "aws-sdk": "^2.477.0",
     "stream": "0.0.2",
     "unzip2": "^0.2.5"
   },
