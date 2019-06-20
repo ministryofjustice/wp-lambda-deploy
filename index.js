@@ -134,12 +134,13 @@ exports.handler = function(event, context) {
         var mypromise = new Promise(function(fulfill, reject) {
             s3.getObject(s3Params).createReadStream()
             .pipe(unzip.Parse())
-            .on('error', e => {})
             .on('entry', function (entry) {
                 var fileName = entry.path;
 
-                console.log('Inside jobData promise, Filename is: ', fileName);
-                console.log('Inside jobData promise, cfParamsFilename is: ', cfParamsFilename);
+
+                console.log('Inside jobData on entry, artifactName is: ', artifactName);
+                console.log('Inside jobData on entry, fileName is: ', fileName);
+                console.log('Inside jobData on entry, cfParamsFilename is: ', cfParamsFilename);
 
                 var returnFile = function() {
                     readFile(entry, function(fileContents) {
