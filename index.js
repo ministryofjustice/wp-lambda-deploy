@@ -67,6 +67,8 @@ exports.handler = function(event, context) {
         });
     };
 
+    console.log('The jobData.continuationToken is set to: ', (!jobData.continuationToken ? 'nothing' :jobData.continuationToken));
+
     // If we have a continuationToken that means that we are in the middle of one update.
     // Let's check the CF Stack status and depending on that continue waiting, success or fail this job
     if (jobData.continuationToken) {
@@ -119,6 +121,8 @@ exports.handler = function(event, context) {
 
     var promises = [];
 
+    console.log('Running jobData.....');
+
     jobData.inputArtifacts.forEach(function(artifact) {
         var artifactName = artifact.name
 
@@ -133,6 +137,9 @@ exports.handler = function(event, context) {
             .on('error', e => {})
             .on('entry', function (entry) {
                 var fileName = entry.path;
+
+                console.log('Inside jobData promise, Filename is: ', fileName);
+                console.log('Inside jobData promise, cfParamsFilename is: ', cfParamsFilename);
 
                 var returnFile = function() {
                     readFile(entry, function(fileContents) {
@@ -154,6 +161,8 @@ exports.handler = function(event, context) {
 
         promises.push(mypromise);
     });
+
+    console.log('Running jobData is now complete.');
 
     Promise.all(promises).then(function(values) {
         var stackParams = values.find((f) => { return f.name === cfParamsFilename; }).contents;
