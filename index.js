@@ -130,6 +130,7 @@ exports.handler = function(event, context) {
         var mypromise = new Promise(function(fulfill, reject) {
             s3.getObject(s3Params).createReadStream()
             .pipe(unzip.Parse())
+            .on('error', e => {})
             .on('entry', function (entry) {
                 var fileName = entry.path;
 
