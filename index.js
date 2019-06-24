@@ -4,7 +4,7 @@ var stream = require('stream');
 
 exports.handler = function(event, context) {
     var codepipeline = new AWS.CodePipeline({apiVersion: '2015-07-09'});
-    var s3 = new AWS.S3({apiVersion: '2006-03-01', signatureVersion: 'v4'});
+    var s3 = new AWS.S3({apiVersion: '2006-03-01', signatureVersion: 'v4', correctClockSkew: true});
     var cloudformation = new AWS.CloudFormation({apiVersion: '2010-05-15', region: 'eu-west-2'});
 
     // Retrieve the Job ID from the Lambda action
@@ -18,8 +18,7 @@ exports.handler = function(event, context) {
     var buildTagFilename = 'BUILD_TAG.txt'
 
     // Always dump event, is very useful to debug
-    console.log(event);
-
+    console.log('Dumping the event: ', event);
     console.log('CodePipeline Job ID:', jobId);
     console.log('Going to deploy:', userParams);
     console.log('Expecting to find params file at:', cfParamsFilename);
@@ -131,16 +130,18 @@ exports.handler = function(event, context) {
             Key: artifact.location.s3Location.objectKey
         }
 
+        console.log('Outside the promise, artifactName is: ', artifactName);
+
         var mypromise = new Promise(function(fulfill, reject) {
-            s3.getObject(s3Params).createReadStream()
+            s3.getObject(s3Params)
+            .createReadStream()
             .pipe(unzip.Parse())
             .on('entry', function (entry) {
                 var fileName = entry.path;
 
 
-                console.log('Inside jobData on entry, artifactName is: ', artifactName);
-                console.log('Inside jobData on entry, fileName is: ', fileName);
-                console.log('Inside jobData on entry, cfParamsFilename is: ', cfParamsFilename);
+                console.log('Inside jobData (on entry), fileName is: ', fileName);
+                console.log('Inside jobData (on entry), cfParamsFilename is: ', cfParamsFilename);
 
                 var returnFile = function() {
                     readFile(entry, function(fileContents) {
