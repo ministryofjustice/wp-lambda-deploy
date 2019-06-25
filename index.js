@@ -1,5 +1,5 @@
 var AWS = require('aws-sdk');
-var unzip = require('unzip2');
+var unzip = require('unzip-stream');
 var stream = require('stream');
 
 exports.handler = function(event, context) {
