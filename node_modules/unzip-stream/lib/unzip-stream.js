@@ -435,15 +435,15 @@ UnzipStream.prototype._readExtraFields = function (data) {
                 fieldType = "extended timestamp";
                 var timestampFields = data.readUInt8(index);
                 var offset = 1;
-                if (timestampFields & 1) {
+                if (vars.extraSize >= offset + 4 && timestampFields & 1) {
                     extra.mtime = new Date(data.readUInt32LE(index + offset) * 1000);
                     offset += 4;
                 }
-                if (timestampFields & 2) {
+                if (vars.extraSize >= offset + 4 && timestampFields & 2) {
                     extra.atime = new Date(data.readUInt32LE(index + offset) * 1000);
                     offset += 4;
                 }
-                if (timestampFields & 4) {
+                if (vars.extraSize >= offset + 4 && timestampFields & 4) {
                     extra.ctime = new Date(data.readUInt32LE(index + offset) * 1000);
                 }
                 break;

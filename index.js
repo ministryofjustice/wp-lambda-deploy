@@ -1,21 +1,21 @@
-var AWS = require('aws-sdk');
-var unzip = require('unzip-stream');
-var stream = require('stream');
+const AWS = require('aws-sdk');
+const unzip = require('unzip-stream');
+const stream = require('stream');
 
 exports.handler = function(event, context) {
-    var codepipeline = new AWS.CodePipeline({apiVersion: '2015-07-09'});
-    var s3 = new AWS.S3({apiVersion: '2006-03-01', signatureVersion: 'v4', correctClockSkew: true});
-    var cloudformation = new AWS.CloudFormation({apiVersion: '2010-05-15', region: 'eu-west-2'});
+    let codepipeline = new AWS.CodePipeline({apiVersion: '2015-07-09'});
+    let s3 = new AWS.S3({apiVersion: '2006-03-01', signatureVersion: 'v4', correctClockSkew: true});
+    let cloudformation = new AWS.CloudFormation({apiVersion: '2010-05-15', region: 'eu-west-2'});
 
     // Retrieve the Job ID from the Lambda action
-    var jobId = event["CodePipeline.job"].id;
-    var jobData = event["CodePipeline.job"].data;
+    let jobId = event["CodePipeline.job"].id;
+    let jobData = event["CodePipeline.job"].data;
 
-    var userParams = JSON.parse(jobData.actionConfiguration.configuration.UserParameters);
+    let userParams = JSON.parse(jobData.actionConfiguration.configuration.UserParameters);
 
-    var cfParamsFilename = userParams.Env + '.json'
-    var cfTemplatesFilename = 'hosting/stack-template.yaml'
-    var buildTagFilename = 'BUILD_TAG.txt'
+    let cfParamsFilename = userParams.Env + '.json'
+    let cfTemplatesFilename = 'hosting/stack-template.yaml'
+    let buildTagFilename = 'BUILD_TAG.txt'
 
     // Always dump event, is very useful to debug
     console.log('Dumping the event: ', event);
@@ -23,9 +23,9 @@ exports.handler = function(event, context) {
     console.log('Going to deploy:', userParams);
     console.log('Expecting to find params file at:', cfParamsFilename);
 
-    // Notify CodePipline of successful job, and exit with success
-    var exitSuccess = function(message, wait = false) {
-        var params = {
+    // Notify CodePipeline of successful job, and exit with success
+    const exitSuccess = function(message, wait = false) {
+        let params = {
             jobId: jobId,
             continuationToken: wait ? jobId : undefined, // we just need a string to validate
         };
@@ -39,8 +39,8 @@ exports.handler = function(event, context) {
     };
 
     // Notify CodePipeline of failed job, and exit with failure
-    var exitFailure = function(message) {
-        var params = {
+    const exitFailure = function(message) {
+        let params = {
             jobId: jobId,
             failureDetails: {
                 message: message,
@@ -56,8 +56,8 @@ exports.handler = function(event, context) {
         });
     };
 
-    var readFile = function(stream, cb) {
-        var chunks = [];
+    const readFile = function(stream, cb) {
+        let chunks = [];
         stream.on('data', function(chunk) {
             chunks.push(chunk.toString());
         });
@@ -112,27 +112,27 @@ exports.handler = function(event, context) {
         return;
     }
 
-    var handlePromiseError = function(error, userMessage) {
+    const handlePromiseError = function(error, userMessage) {
         console.error(userMessage);
         console.error(error);
         exitFailure(userMessage);
     }
 
-    var promises = [];
+    let promises = [];
 
     console.log('Running jobData.....');
 
     jobData.inputArtifacts.forEach(function(artifact) {
-        var artifactName = artifact.name
+        let artifactName = artifact.name
 
-        var s3Params = {
+        let s3Params = {
             Bucket: artifact.location.s3Location.bucketName,
             Key: artifact.location.s3Location.objectKey
         }
 
         console.log('Outside the promise, artifactName is: ', artifactName);
 
-        var mypromise = new Promise(function(fulfill, reject) {
+        const myPromise = new Promise(function(fulfill, reject) {
             s3.getObject(s3Params)
             .createReadStream()
             .pipe(unzip.Parse())
@@ -149,11 +149,11 @@ exports.handler = function(event, context) {
                     });
                 };
 
-                if (artifactName == 'CfTemplates' && fileName == cfTemplatesFilename) {
+                if (artifactName === 'CfTemplates' && fileName === cfTemplatesFilename) {
                     returnFile();
-                } else if (artifactName == 'CfParams' && fileName == cfParamsFilename) {
+                } else if (artifactName === 'CfParams' && fileName === cfParamsFilename) {
                     returnFile();
-                } else if (artifactName == 'DeployTag' && fileName == buildTagFilename) {
+                } else if (artifactName === 'DeployTag' && fileName === buildTagFilename) {
                     returnFile();
                 } else {
                     entry.autodrain();
@@ -161,28 +161,28 @@ exports.handler = function(event, context) {
             });
         });
 
-        promises.push(mypromise);
+        promises.push(myPromise);
     });
 
     console.log('Running jobData is now complete.');
 
     Promise.all(promises).then(function(values) {
-        var stackParams = values.find((f) => { return f.name === cfParamsFilename; }).contents;
-        var cloudTemplate = values.find((f) => { return f.name === cfTemplatesFilename; }).contents;
-        var buildTag = values.find((f) => { return f.name === buildTagFilename; }).contents;
+        let stackParams = values.find((f) => { return f.name === cfParamsFilename; }).contents;
+        let cloudTemplate = values.find((f) => { return f.name === cfTemplatesFilename; }).contents;
+        let buildTag = values.find((f) => { return f.name === buildTagFilename; }).contents;
 
         stackParams = JSON.parse(stackParams);
 
-        var dockerImage;
+        let dockerImage;
         stackParams.forEach((value, index) => {
-            if (value.ParameterKey == 'DockerImage') {
+            if (value.ParameterKey === 'DockerImage') {
                 stackParams[index].ParameterValue =
                   stackParams[index].ParameterValue.replace('<DEPLOY_TAG>', buildTag);
                   dockerImage = stackParams[index].ParameterValue;
             }
         });
 
-        var cloudFormationParams = {
+        let cloudFormationParams = {
             StackName: userParams.AppName + '-' + userParams.Env,
             TemplateBody: cloudTemplate,
             Parameters: stackParams,
@@ -192,11 +192,11 @@ exports.handler = function(event, context) {
         console.log('Using build tag:', buildTag);
         console.log('Docker image:', dockerImage);
 
-        var cloudCheckPromise = new Promise(function(fulfill, reject){
-            var params = { StackName: cloudFormationParams.StackName };
+        const cloudCheckPromise = new Promise(function(fulfill, reject){
+            let params = { StackName: cloudFormationParams.StackName };
             cloudformation.describeStacks(params, function(err, data){
                 if (err) {
-                    if (err.code == 'ValidationError'){
+                    if (err.code === 'ValidationError'){
                         fulfill('createStack');
                     } else {
                         reject(err);
@@ -208,7 +208,7 @@ exports.handler = function(event, context) {
         });
 
         cloudCheckPromise.then(function(deployMethod) {
-            var cloudFormationPromise = new Promise(function(fulfill, reject) {
+            const cloudFormationPromise = new Promise(function(fulfill, reject) {
                 console.log('About to call ' + deployMethod + ' on CloudFormation stack');
                 cloudformation[deployMethod](cloudFormationParams, function(err, data) {
                     if (err) {
