@@ -12,7 +12,7 @@ function Extract (opts) {
     Transform.call(this);
 
     this.opts = opts || {};
-    this.unzipStream = new UnzipStream();
+    this.unzipStream = new UnzipStream(this.opts);
     this.unfinishedEntries = 0;
     this.afterFlushWait = false;
     this.createdDirectories = {};

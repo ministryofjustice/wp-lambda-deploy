@@ -7,7 +7,7 @@
     "aws-sdk": "^2.632.0",
     "fstream": "^1.0.12",
     "stream": "0.0.2",
-    "unzip-stream": "^0.3.0"
+    "unzip-stream": "^0.3.1"
   },
   "devDependencies": {},
   "scripts": {
